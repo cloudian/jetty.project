@@ -478,6 +478,13 @@ public class HttpParser
         switch(s)
         {
             case ILLEGAL:
+                if (!(ch==LINE_FEED || ch==TAB)) {
+                    // CLOUDIAN: Instead of throwing exception for illegal characters, accept it,
+                    // and then in parsedHeaders will discard the header and value.
+                    LOG.info("CLOUDIAN suppress IllegalCharacterException");
+                    ch = 0x01;
+                    break;
+                }
                 throw new IllegalCharacterException(_state,ch,buffer);
 
             case LF:
@@ -982,6 +989,10 @@ public class HttpParser
             byte ch=next(buffer);
             if (ch==0)
                 break;
+            if (ch == 0x01) { // CLOUDIAN discard bad character
+                LOG.info("Discard bad character in parseHeaders.");
+                continue;
+            }
 
             if (_maxHeaderBytes>0 && ++_headerBytes>_maxHeaderBytes)
             {
