@@ -482,7 +482,6 @@ public class HttpParser
                     // CLOUDIAN: Instead of throwing exception for illegal characters, accept it,
                     // and then in parsedHeaders will discard the header and value.
                     LOG.info("CLOUDIAN suppress IllegalCharacterException");
-                    ch = 0x01;
                     break;
                 }
                 throw new IllegalCharacterException(_state,ch,buffer);
@@ -970,7 +969,8 @@ public class HttpParser
         catch(NumberFormatException e)
         {
             LOG.ignore(e);
-            throw new BadMessageException(HttpStatus.BAD_REQUEST_400,"Invalid Content-Length Value");
+            throw new BadMessageException(HttpStatus.BAD_REQUEST_400,"Bad Request");
+            //CLOUDIAN throw new BadMessageException(HttpStatus.BAD_REQUEST_400,"Invalid Content-Length Value");
         }
     }
 
@@ -989,10 +989,6 @@ public class HttpParser
             byte ch=next(buffer);
             if (ch==0)
                 break;
-            if (ch == 0x01) { // CLOUDIAN discard bad character
-                LOG.info("Discard bad character in parseHeaders.");
-                continue;
-            }
 
             if (_maxHeaderBytes>0 && ++_headerBytes>_maxHeaderBytes)
             {
@@ -1254,6 +1250,16 @@ public class HttpParser
                         setState(State.HEADER);
                         break;
                     }
+
+                    if (__charState[0xff & ch] == CharState.ILLEGAL) {
+                        // CLOUDIAN discard or allow bad character
+                        _string.append((char)(0xff&ch));
+                        _length=_string.length();
+                        setState(State.HEADER_IN_VALUE);
+                        LOG.info("CLOUDIAN Allow bad character in parseHeaders/HEADER_VALUE:" + ch);
+                        break;
+                    }
+
                     throw new IllegalCharacterException(_state,ch,buffer);
 
                 case HEADER_IN_VALUE:
@@ -1271,6 +1277,21 @@ public class HttpParser
                         break;
                     }
 
+                    if (__charState[0xff & ch] == CharState.ILLEGAL) {
+                        // CLOUDIAN discard bad character
+                        if (_valueString!=null)
+                        {
+                            setString(_valueString);
+                            _valueString=null;
+                            _field=null;
+                        }
+                        _string.append((char)(0xff&ch));
+                        if (ch>HttpTokens.SPACE || ch<0)
+                            _length=_string.length();
+                        LOG.info("CLOUDIAN Allow bad character in parseHeaders/HEADER_IN_VALUE:" + ch);
+                        break;
+                    }
+
                     if (ch==HttpTokens.LINE_FEED)
                     {
                         if (_length > 0)
@@ -1278,6 +1299,10 @@ public class HttpParser
                             _value=null;
                             _valueString=takeString();
                             _length=-1;
+                        }
+                        if (_headerString.toString().equals("Expect")) { //HS-36913: Skip value for Expect header.
+                            LOG.info("CLOUDIAN Set Expect value to 100-Continue");
+                            _valueString = "100-Continue";
                         }
                         setState(State.HEADER);
                         break;
