@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Locale;
+import java.util.Objects;
 
 import org.eclipse.jetty.http.HttpTokens.EndOfContent;
 import org.eclipse.jetty.util.ArrayTernaryTrie;
@@ -1300,8 +1301,9 @@ public class HttpParser
                             _valueString=takeString();
                             _length=-1;
                         }
-                        if (_headerString.toString().equals("Expect")) { //HS-36913: Skip value for Expect header.
-                            LOG.info("CLOUDIAN Set Expect value to 100-Continue");
+                        if (Objects.equals(_headerString.toString(), "Expect") && !Objects.equals("100-Continue", _valueString)) {
+                            //HS-36913: Skip value for Expect header.
+                            LOG.debug("CLOUDIAN Set Expect value to 100-Continue");
                             _valueString = "100-Continue";
                         }
                         setState(State.HEADER);
